@@ -1,8 +1,10 @@
 package adnl
 
 import (
+	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/binary"
 	"fmt"
 	"net"
 )
@@ -61,14 +63,22 @@ func NewClient(peerPublicKey []byte, host string) (*Client, error) {
 }
 
 func (c *Client) reader() {
+	conn := bufio.NewReader(c.conn)
 	for {
 		b := make([]byte, 4)
-		_, err := c.conn.Read(b)
+		_, err := conn.Read(b)
 		if err != nil {
-			print(err)
-		} else {
-			fmt.Println(string(b))
+			panic(err)
 		}
+		c.decipher.XORKeyStream(b, b)
+		length := binary.LittleEndian.Uint32(b)
+		payload := make([]byte, length)
+		conn.Read(payload)
+		p, err := ParsePacket(b)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(p)
 	}
 }
 
@@ -92,4 +102,11 @@ func (c *Client) handshake() error {
 		return err
 	}
 	return nil
+}
+
+func (c *Client) Send(p Packet) error {
+	b := p.Marshal()
+	c.cipher.XORKeyStream(b, b)
+	_, err := c.conn.Write(b)
+	return err
 }
