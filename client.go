@@ -80,7 +80,7 @@ func (c *Client) reader() {
 		if err != nil {
 			panic(err)
 		}
-		if len(p.payload) >= 4 && binary.BigEndian.Uint32(p.payload[:4]) == TCPMagicPong {
+		if len(p.Payload) >= 4 && binary.BigEndian.Uint32(p.Payload[:4]) == TCPMagicPong {
 			continue //todo: remember last pong
 		}
 		c.resp <- p

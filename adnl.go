@@ -46,12 +46,12 @@ func (p params) hash() []byte {
 }
 
 type Packet struct {
-	payload []byte
+	Payload []byte
 	nonce   [32]byte
 }
 
 func NewPacket(payload []byte) (Packet, error) {
-	packet := Packet{payload: payload}
+	packet := Packet{Payload: payload}
 	_, err := io.ReadFull(rand.Reader, packet.nonce[:])
 	return packet, err
 }
@@ -59,21 +59,21 @@ func NewPacket(payload []byte) (Packet, error) {
 func (p Packet) hash() []byte {
 	h := sha256.New()
 	h.Write(p.nonce[:])
-	h.Write(p.payload)
+	h.Write(p.Payload)
 	return h.Sum(nil)
 }
 
 func (p Packet) size() []byte {
 	s := make([]byte, 4)
-	binary.LittleEndian.PutUint32(s[:], uint32(len(p.payload)+32+32))
+	binary.LittleEndian.PutUint32(s[:], uint32(len(p.Payload)+32+32))
 	return s
 }
 func (p Packet) marshal() []byte {
-	b := make([]byte, 4+32+len(p.payload)+32)
+	b := make([]byte, 4+32+len(p.Payload)+32)
 	copy(b[:4], p.size())
 	copy(b[4:36], p.nonce[:])
-	copy(b[36:36+len(p.payload)], p.payload)
-	copy(b[36+len(p.payload):], p.hash())
+	copy(b[36:36+len(p.Payload)], p.Payload)
+	copy(b[36+len(p.Payload):], p.hash())
 	return b
 }
 
@@ -99,8 +99,8 @@ func ParsePacket(r io.Reader, decryptor cipher.Stream) (Packet, error) {
 	}
 	decryptor.XORKeyStream(data, data)
 	copy(p.nonce[:], data[:32])
-	p.payload = make([]byte, length-32-32)
-	copy(p.payload, data[32:length-32])
+	p.Payload = make([]byte, length-32-32)
+	copy(p.Payload, data[32:length-32])
 	if !bytes.Equal(data[length-32:], p.hash()) {
 		return p, fmt.Errorf("checksum error")
 	}
