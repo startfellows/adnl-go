@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
-	"encoding/binary"
 	"fmt"
 	"net"
 )
@@ -51,11 +50,12 @@ func NewClient(peerPublicKey []byte, host string) (*Client, error) {
 		params:   params,
 		keys:     keys,
 		cipher:   cipher.NewCTR(ci, params.TxNonce()),
-		decipher: cipher.NewCTR(dci, params.TxNonce()),
+		decipher: cipher.NewCTR(dci, params.RxNonce()),
 		conn:     conn,
 	}
-	go c.reader()
+
 	err = c.handshake()
+	go c.reader()
 	if err != nil {
 		return nil, err
 	}
@@ -65,48 +65,47 @@ func NewClient(peerPublicKey []byte, host string) (*Client, error) {
 func (c *Client) reader() {
 	conn := bufio.NewReader(c.conn)
 	for {
-		b := make([]byte, 4)
-		_, err := conn.Read(b)
+		p, err := ParsePacket(conn, c.decipher)
 		if err != nil {
 			panic(err)
 		}
-		c.decipher.XORKeyStream(b, b)
-		length := binary.LittleEndian.Uint32(b)
-		payload := make([]byte, length)
-		conn.Read(payload)
-		p, err := ParsePacket(b)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println(p)
+		fmt.Println("read nonce", p.nonce)
 	}
 }
 
 func (c *Client) handshake() error {
-	key := append(c.keys.shared[:16], c.params.Hash()[16:32]...)
-	nonce := append(c.params.Hash()[0:4], c.keys.shared[20:32]...)
+	key := append([]byte{}, c.keys.shared[:16]...)
+	key = append(key, c.params.Hash()[16:32]...)
+	nonce := append([]byte{}, c.params.Hash()[0:4]...)
+	nonce = append(nonce, c.keys.shared[20:32]...)
 	cipheKey, err := aes.NewCipher(key)
 	if err != nil {
 		return err
 	}
 	data := append([]byte{}, c.params[:]...)
 	cipher.NewCTR(cipheKey, nonce).XORKeyStream(data, data)
-
 	req := make([]byte, 256)
 	copy(req[:32], c.address.Hash())
 	copy(req[32:64], c.keys.public)
 	copy(req[64:96], c.params.Hash())
 	copy(req[96:], data)
-	_, err = c.conn.Write(data)
+	_, err = c.conn.Write(req)
 	if err != nil {
 		return err
 	}
+	p, err := ParsePacket(c.conn, c.decipher)
+	if err != nil {
+		return err
+	}
+	fmt.Println("handshake", p)
 	return nil
 }
 
 func (c *Client) Send(p Packet) error {
 	b := p.Marshal()
+	fmt.Println("send nonce", p.nonce)
 	c.cipher.XORKeyStream(b, b)
+
 	_, err := c.conn.Write(b)
 	return err
 }

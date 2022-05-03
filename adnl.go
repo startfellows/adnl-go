@@ -2,6 +2,7 @@ package adnl
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -76,21 +77,31 @@ func (p Packet) Marshal() []byte {
 	return b
 }
 
-func ParsePacket(data []byte) (Packet, error) {
+func ParsePacket(r io.Reader, decrypter cipher.Stream) (Packet, error) {
 	var p Packet
-	if len(data) < 4 {
-		return p, fmt.Errorf("not enough bytes (%v) for parsing packet", len(data))
+	size := make([]byte, 4) //todo: reuse via sync.pool
+	n, err := r.Read(size)
+	if err != nil {
+		return Packet{}, err
 	}
-	length := int(binary.LittleEndian.Uint32(data[:4]))
-	if length+4 != len(data) {
-		return p, fmt.Errorf("invalid packe length. should be %v by header but real length is %v", length, len(data)-4)
+	if n < 4 {
+		return p, fmt.Errorf("not enough bytes (%v) for parsing packet", n)
 	}
-	copy(p.nonce[:], data[4:36])
+	decrypter.XORKeyStream(size, size)
+	length := int(binary.LittleEndian.Uint32(size))
+	data := make([]byte, length)
+	n, err = r.Read(data)
+	if err != nil {
+		return Packet{}, err
+	}
+	if n != length {
+		return p, fmt.Errorf("invalid packe length. should be %v by header but real length is %v", length, n)
+	}
+	decrypter.XORKeyStream(data, data)
+	copy(p.nonce[:], data[:32])
 	p.payload = make([]byte, length-32-32)
-	copy(p.payload, data[36:36+len(p.payload)])
-	hash := make([]byte, 32)
-	copy(hash, data[len(data)-36:])
-	if !bytes.Equal(hash, p.Hash()) {
+	copy(p.payload, data[32:length-32])
+	if !bytes.Equal(data[length-32:], p.Hash()) {
 		return p, fmt.Errorf("checksum error")
 	}
 	return p, nil
