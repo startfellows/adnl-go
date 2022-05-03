@@ -8,22 +8,22 @@ import (
 	"github.com/oasisprotocol/curve25519-voi/primitives/x25519"
 )
 
-type Keys struct {
+type x25519Keys struct {
 	public []byte
 	shared []byte
 }
 
-func NewKeys(peerPublicKey ed25519.PublicKey) (Keys, error) {
+func newKeys(peerPublicKey ed25519.PublicKey) (x25519Keys, error) {
 	public, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return Keys{}, err
+		return x25519Keys{}, err
 	}
 
 	shared, err := sharedKey(privateKey, peerPublicKey)
 	if err != nil {
-		return Keys{}, err
+		return x25519Keys{}, err
 	}
-	return Keys{shared: shared, public: public}, nil
+	return x25519Keys{shared: shared, public: public}, nil
 }
 
 func sharedKey(ourKey ed25519.PrivateKey, serverKey ed25519.PublicKey) ([]byte, error) {
