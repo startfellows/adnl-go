@@ -1,8 +1,7 @@
-module adnl-go
+module github.com/startfellows/adnl-go
 
 go 1.18
 
-require github.com/aead/ecdh v0.2.0
 
 require (
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20220328075252-7dd334e3daae // indirect

@@ -5,7 +5,15 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/binary"
+	mrand "math/rand"
 	"net"
+	"time"
+)
+
+const (
+	TCPMagicPing = 0x9a2b084d
+	TCPMagicPong = 0x03fb69dc
 )
 
 type Client struct {
@@ -57,10 +65,11 @@ func NewClient(ctx context.Context, peerPublicKey []byte, host string) (*Client,
 	}
 
 	err = c.handshake()
-	go c.reader()
 	if err != nil {
 		return nil, err
 	}
+	go c.reader()
+	go c.ping()
 	return c, nil
 }
 
@@ -70,6 +79,9 @@ func (c *Client) reader() {
 		p, err := ParsePacket(conn, c.decipher)
 		if err != nil {
 			panic(err)
+		}
+		if len(p.payload) >= 4 && binary.BigEndian.Uint32(p.payload[:4]) == TCPMagicPong {
+			continue //todo: remember last pong
 		}
 		c.resp <- p
 	}
@@ -111,4 +123,21 @@ func (c *Client) Send(p Packet) error {
 
 func (c *Client) Responses() chan Packet {
 	return c.resp
+}
+
+func (c *Client) ping() {
+	ping := make([]byte, 12)
+	binary.BigEndian.PutUint32(ping[:4], TCPMagicPing)
+	for {
+		time.Sleep(time.Second * 10)
+		mrand.Read(ping[4:])
+		p, err := NewPacket(ping)
+		if err != nil {
+			panic(err)
+		}
+		err = c.Send(p)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
