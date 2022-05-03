@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	TCPMagicPing = 0x9a2b084d
-	TCPMagicPong = 0x03fb69dc
+	magicTCPPing = 0x9a2b084d
+	magicTCPPong = 0x03fb69dc
 )
 
-type Client struct {
+type Connection struct {
 	address Address
 	params  params
 	keys    x25519Keys
@@ -28,7 +28,7 @@ type Client struct {
 	resp chan Packet
 }
 
-func NewClient(ctx context.Context, peerPublicKey []byte, host string) (*Client, error) {
+func NewConnection(ctx context.Context, peerPublicKey []byte, host string) (*Connection, error) {
 	a, err := NewAddress(peerPublicKey)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func NewClient(ctx context.Context, peerPublicKey []byte, host string) (*Client,
 	if err != nil {
 		return nil, err
 	}
-	var c = &Client{
+	var c = &Connection{
 		address:  a,
 		params:   params,
 		keys:     keys,
@@ -73,21 +73,21 @@ func NewClient(ctx context.Context, peerPublicKey []byte, host string) (*Client,
 	return c, nil
 }
 
-func (c *Client) reader() {
+func (c *Connection) reader() {
 	conn := bufio.NewReader(c.conn)
 	for {
 		p, err := ParsePacket(conn, c.decipher)
 		if err != nil {
 			panic(err)
 		}
-		if len(p.Payload) >= 4 && binary.BigEndian.Uint32(p.Payload[:4]) == TCPMagicPong {
+		if len(p.Payload) >= 4 && binary.BigEndian.Uint32(p.Payload[:4]) == magicTCPPong {
 			continue //todo: remember last pong
 		}
 		c.resp <- p
 	}
 }
 
-func (c *Client) handshake() error {
+func (c *Connection) handshake() error {
 	key := append([]byte{}, c.keys.shared[:16]...)
 	key = append(key, c.params.hash()[16:32]...)
 	nonce := append([]byte{}, c.params.hash()[0:4]...)
@@ -114,20 +114,20 @@ func (c *Client) handshake() error {
 	return nil
 }
 
-func (c *Client) Send(p Packet) error {
+func (c *Connection) Send(p Packet) error {
 	b := p.marshal()
 	c.cipher.XORKeyStream(b, b)
 	_, err := c.conn.Write(b)
 	return err
 }
 
-func (c *Client) Responses() chan Packet {
+func (c *Connection) Responses() chan Packet {
 	return c.resp
 }
 
-func (c *Client) ping() {
+func (c *Connection) ping() {
 	ping := make([]byte, 12)
-	binary.BigEndian.PutUint32(ping[:4], TCPMagicPing)
+	binary.BigEndian.PutUint32(ping[:4], magicTCPPing)
 	for {
 		time.Sleep(time.Second * 10)
 		mrand.Read(ping[4:])
