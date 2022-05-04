@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	magicTCPPing = 0x9a2b084d
-	magicTCPPong = 0x03fb69dc
+	magicTCPPing = 0x9a2b084d //crc32(tcp.ping random_id:long = tcp.Pong)
+	magicTCPPong = 0x03fb69dc //crc32(tcp.pong random_id:long = tcp.Pong)
 )
 
 type Connection struct {
@@ -80,7 +80,7 @@ func (c *Connection) reader() {
 		if err != nil {
 			panic(err)
 		}
-		if len(p.Payload) >= 4 && binary.BigEndian.Uint32(p.Payload[:4]) == magicTCPPong {
+		if p.MagicType() == magicTCPPong {
 			continue //todo: remember last pong
 		}
 		c.resp <- p

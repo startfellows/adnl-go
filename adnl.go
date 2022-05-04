@@ -77,10 +77,17 @@ func (p Packet) marshal() []byte {
 	return b
 }
 
+func (p Packet) MagicType() uint32 {
+	if len(p.Payload) < 4 {
+		return 0
+	}
+	return binary.BigEndian.Uint32(p.Payload[:4])
+}
+
 func ParsePacket(r io.Reader, decryptor cipher.Stream) (Packet, error) {
 	var p Packet
 	size := make([]byte, 4) //todo: reuse via sync.pool
-	n, err := r.Read(size)
+	n, err := io.ReadFull(r, size)
 	if err != nil {
 		return Packet{}, err
 	}
@@ -90,7 +97,7 @@ func ParsePacket(r io.Reader, decryptor cipher.Stream) (Packet, error) {
 	decryptor.XORKeyStream(size, size)
 	length := int(binary.LittleEndian.Uint32(size))
 	data := make([]byte, length)
-	n, err = r.Read(data)
+	n, err = io.ReadFull(r, data)
 	if err != nil {
 		return Packet{}, err
 	}
@@ -99,7 +106,7 @@ func ParsePacket(r io.Reader, decryptor cipher.Stream) (Packet, error) {
 	}
 	decryptor.XORKeyStream(data, data)
 	copy(p.nonce[:], data[:32])
-	p.Payload = make([]byte, length-32-32)
+	p.Payload = make([]byte, length-32-32) //todo: maybe remove copy
 	copy(p.Payload, data[32:length-32])
 	if !bytes.Equal(data[length-32:], p.hash()) {
 		return p, fmt.Errorf("checksum error")
