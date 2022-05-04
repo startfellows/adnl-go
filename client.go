@@ -11,7 +11,6 @@ import (
 const (
 	magicADNLQuery  = 0x7af98bb4 // crc32("adnl.message.query query_id:int256 query:bytes = adnl.Message")
 	magicADNLAnswer = 0x1684ac0f // crc32("adnl.message.answer query_id:int256 answer:bytes = adnl.Message")
-
 )
 
 type queryID [32]byte
@@ -55,8 +54,12 @@ func (c *Client) Request(ctx context.Context, q Query) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	return <-resp, nil //todo: timeout
-
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case b := <-resp:
+		return b, nil
+	}
 }
 
 func (c *Client) registerCallback(id queryID) chan Message {
